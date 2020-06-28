@@ -1,4 +1,6 @@
-RSpec.describe 'POST /message users can post messages' do
+# frozen_string_literal: true
+
+RSpec.describe 'POST /offers/:offer_id/message users can post messages' do
   let(:requester) { create(:user, email: 'requester@mail.com') }
   let(:req_creds) { requester.create_new_auth_token }
   let(:req_headers) { { HTTP_ACCEPT: 'application/json' }.merge!(req_creds) }
@@ -10,7 +12,7 @@ RSpec.describe 'POST /message users can post messages' do
   let(:third_user) { create(:user) }
   let(:third_user_credentials) { third_user.create_new_auth_token }
   let(:third_user_headers) { { HTTP_ACCEPT: 'application/json' }.merge!(third_user_credentials) }
-  
+
   let(:request) { create(:request, requester: requester) }
   let(:offer) { create(:offer, request: request, helper: helper) }
 
@@ -18,7 +20,7 @@ RSpec.describe 'POST /message users can post messages' do
 
   describe 'successfully as the requester' do
     before do
-      post '/api/messages', headers: req_headers, params: { offer_id: offer.id, content: "message content" }
+      post "/api/offers/#{offer.id}/messages", headers: req_headers, params: { content: 'message content' }
     end
 
     it 'gives a success status' do
@@ -27,13 +29,19 @@ RSpec.describe 'POST /message users can post messages' do
 
     it 'creates a message based on the params' do
       offer.reload
-      expect(offer.conversation.messages.last['content']).to eq "message content"
+      expect(offer.conversation.messages.last['content']).to eq 'message content'
+    end
+
+    it 'dispatches a websocket message' do
+      expect(
+        ActionCable.server.worker_pool.executor.worker_task_completed
+      ).to eq 1
     end
   end
 
   describe 'successfully as the helper' do
     before do
-      post '/api/messages', headers: helper_headers, params: { offer_id: offer.id, content: "message content" }
+      post "/api/offers/#{offer.id}/messages", headers: helper_headers, params: { content: 'message content' }
     end
 
     it 'gives a success status' do
@@ -42,14 +50,14 @@ RSpec.describe 'POST /message users can post messages' do
 
     it 'creates a message based on the params' do
       offer.reload
-      expect(offer.conversation.messages.last['content']).to eq "message content"
+      expect(offer.conversation.messages.last['content']).to eq 'message content'
     end
   end
 
   describe 'unsuccessfully' do
     describe 'without content' do
       before do
-        post '/api/messages', headers: helper_headers, params: { offer_id: offer.id }
+        post "/api/offers/#{offer.id}/messages", headers: helper_headers
       end
 
       it 'gives an error status' do
@@ -61,23 +69,23 @@ RSpec.describe 'POST /message users can post messages' do
       end
     end
 
-    describe 'without offer_id' do
-      before do
-        post '/api/messages', headers: helper_headers, params: { content: 'message content' }
-      end
+    # describe 'without offer_id' do
+    #   before do
+    #     post '/api/messages', headers: helper_headers, params: { content: 'message content' }
+    #   end
 
-      it 'gives an error status' do
-        expect(response).to have_http_status 422
-      end
+    #   it 'gives an error status' do
+    #     expect(response).to have_http_status 422
+    #   end
 
-      it 'gives an error message' do
-        expect(response_json['message']).to eq "Couldn't find Offer without an ID"
-      end
-    end
+    #   it 'gives an error message' do
+    #     expect(response_json['message']).to eq "Couldn't find Offer without an ID"
+    #   end
+    # end
 
     describe 'unauthorized' do
       before do
-        post '/api/messages', headers: third_user_headers, params: { offer_id: offer.id, content: 'message content' }
+        post "/api/offers/#{offer.id}/messages", headers: third_user_headers, params: { content: 'message content' }
       end
 
       it 'gives an error status' do
@@ -91,9 +99,8 @@ RSpec.describe 'POST /message users can post messages' do
 
     describe 'unauthenticated' do
       before do
-        post '/api/messages', params: { offer_id: offer.id, content: 'message content' }
+        post "/api/offers/#{offer.id}/messages", params: { content: 'message content' }
       end
-
 
       it 'gives an error status' do
         expect(response).to have_http_status 401

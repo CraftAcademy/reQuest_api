@@ -21,4 +21,13 @@ RSpec.describe Message, type: :model do
       expect(create(:message)).to be_valid
     end
   end
+
+  describe 'broadcast' do
+    it 'should broadcast after creation' do
+      message = create(:message)
+      expect {
+        message.save
+      }.to have_broadcasted_to("offer_conversation_#{Message.last.conversation.offer.id}")
+    end
+  end
 end
